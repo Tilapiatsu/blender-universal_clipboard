@@ -57,6 +57,7 @@ class ClipboardHandler(P_ClipboardHandler):
             "need to be in edit mode"
             return
 
+        Deserializer.ensure_attributes_on_object(obj, GLOBAL_CLIPBOARD)
         bm = bmesh.from_edit_mesh(obj.data)
         src = Deserializer.deserialize_geometry(GLOBAL_CLIPBOARD)
         src.verts.ensure_lookup_table()
@@ -80,43 +81,14 @@ class ClipboardHandler(P_ClipboardHandler):
             except:
                 pass
 
-        Deserializer.deserialize_attributes(bm, GLOBAL_CLIPBOARD)
-        Deserializer.deserialize_shape_keys(bm, GLOBAL_CLIPBOARD)
-        Deserializer.deserialize_vertex_groups(bm, GLOBAL_CLIPBOARD)
-        Deserializer.deserialize_materials(bm, GLOBAL_CLIPBOARD)
-
         src.free()
 
         bmesh.update_edit_mesh(obj.data)
 
-    @classmethod
-    def _rebuild_bmesh(cls, data: dict):
-
-        bm = bmesh.new()
-
-        verts = []
-
-        for co in data["verts"]:
-            verts.append(bm.verts.new(co))
-
-        bm.verts.ensure_lookup_table()
-
-        for face in data["faces"]:
-            try:
-                bm.faces.new([verts[i] for i in face])
-            except:
-                pass
-
-        sharp_layer = bm.edges.layers.bool.get("sharp_edge")
-
-        for edges in data["edges"]:
-            try:
-                ne = bm.edges.new((verts[edges["verts"][0]], verts[edges["verts"][1]]))
-                ne[sharp_layer] = edges["sharp"]
-            except:
-                pass
-
-        return bm
+        Deserializer.deserialize_attributes(obj, GLOBAL_CLIPBOARD)
+        Deserializer.deserialize_shape_keys(obj, GLOBAL_CLIPBOARD)
+        Deserializer.deserialize_vertex_groups(obj, GLOBAL_CLIPBOARD)
+        Deserializer.deserialize_materials(obj, GLOBAL_CLIPBOARD)
 
     @classmethod
     def _extract_selected_bmesh(cls, src_bm: bmesh.types.BMesh) -> bmesh.types.BMesh:
@@ -145,136 +117,9 @@ class ClipboardHandler(P_ClipboardHandler):
         return dst_bm
 
     @classmethod
-    def _serialize_bmesh(cls, bm: bmesh.types.BMesh):
-        bm.verts.ensure_lookup_table()
-        bm.edges.ensure_lookup_table()
-        bm.faces.ensure_lookup_table()
-
-        bm.verts.index_update()
-        bm.edges.index_update()
-        bm.faces.index_update()
-
-        vert_indices = {v: i for i, v in enumerate(bm.verts)}
-        sharp_layer = bm.edges.layers.bool.get("sharp_edge")
-        crease_layer = bm.edges.layers.float.get("crease_edge")
-
-        print(sharp_layer)
-        print(crease_layer)
-
-        result = {
-            "verts": [tuple(v.co) for v in bm.verts],
-            "edges": [
-                {
-                    "verts": (vert_indices[e.verts[0]], vert_indices[e.verts[1]]),
-                    "seam": e.seam,
-                    "sharp": e[sharp_layer] if sharp_layer else False,
-                    "crease": e[crease_layer] if crease_layer else False,
-                }
-                for e in bm.edges
-            ],
-            "faces": [[vert_indices[v] for v in f.verts] for f in bm.faces],
-        }
-
-        return result
-
-    @classmethod
-    def _copy_shape_keys(cls, obj: bpy.types.Object, selected_verts):
-        result = {}
-        if obj.data.shape_keys is None:
-            return result
-
-        for key in obj.data.shape_keys.key_blocks:
-            result[key.name] = {idx: tuple(key.data[idx].co) for idx in selected_verts}
-
-        return result
-
-    @classmethod
-    def _ensure_attributes_on_bmesh(cls, bm: bmesh.types.BMesh, attributes: list[dict]):
-        for a in attributes:
-            domain = getattr(bm, cls._get_bmesh_domain(a["domain"]))
-            if not domain:
-                continue
-
-            match a["data_type"]:
-                case "FLOAT":
-                    attr = domain.layers.float.get(a["name"])
-                    if not attr:
-                        domain.layers.float.new(a["name"])
-
-                case "INT":
-                    attr = domain.layers.int.get(a["name"])
-                    if not attr:
-                        domain.layers.int.new(a["name"])
-
-                case "BOOLEAN":
-                    attr = domain.layers.bool.get(a["name"])
-                    if not attr:
-                        domain.layers.bool.new(a["name"])
-
-                case "FLOAT_VECTOR":
-                    attr = domain.layers.float_vector.get(a["name"])
-                    if not attr:
-                        domain.layers.float_vector.new(a["name"])
-
-                case "FLOAT_COLOR":
-                    attr = domain.layers.float_color.get(a["name"])
-                    if not attr:
-                        domain.layers.float_color.new(a["name"])
-
-                case "QUATERNION":
-                    pass
-
-                case "FLOAT4X4":
-                    pass
-
-                case "STRING":
-                    attr = domain.layers.string.get(a["name"])
-                    if not attr:
-                        domain.layers.string.new(a["name"])
-
-                case "INT8":
-                    attr = domain.layers.int.get(a["name"])
-                    if not attr:
-                        domain.layers.int.new(a["name"])
-
-                case "INT16_2D":
-                    attr = domain.layers.int.get(a["name"])
-                    if not attr:
-                        domain.layers.int.new(a["name"])
-
-                case "INT32_2D":
-                    attr = domain.layers.int.get(a["name"])
-                    if not attr:
-                        domain.layers.int.new(a["name"])
-
-                case "FLOAT2":
-                    attr = domain.layers.float.get(a["name"])
-                    if not attr:
-                        domain.layers.float.new(a["name"])
-
-                case "BYTE_COLOR":
-                    attr = domain.layers.color.get(a["name"])
-                    if not attr:
-                        domain.layers.color.new(a["name"])
-                case _:
-                    pass
-
-    @classmethod
-    def _get_bmesh_domain(cls, domain_name: str) -> str:
-        match domain_name:
-            case "POINT":
-                return "verts"
-            case "EDGE":
-                return "edges"
-            case "FACE":
-                return "faces"
-            case "CORNER":
-                return "loops"
-            case "CURVE":
-                return "curves"
-            case "INSTANCE":
-                return "instance"
-            case "LAYER":
-                return "layer"
-            case _:
-                return ""
+    def _create_object_from_bmesh(cls, bmesh):
+        mesh = bpy.data.meshes.new("UCB_clipboard_mesh")
+        bmesh.normal_update()
+        bmesh.to_mesh(mesh)
+        clipboard = bpy.data.objects.new("UCB_clipboard", mesh)
+        bpy.context.scene.collection.objects.link(clipboard)

@@ -146,17 +146,126 @@ class Deserializer:
         return bm
 
     @classmethod
-    def deserialize_attributes(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
+    def deserialize_attributes(cls, obj: bpy.types.Object, clipboard: ClipboardData):
+        return
+        src_attributes = clipboard.attributes
+        dst_attributes = obj.data.attributes
+
+        for name, a in src_attributes.items:
+            if name not in dst_attributes:
+                cls.ensure_attributes_on_object(obj, clipboard)
+
+    @classmethod
+    def deserialize_shape_keys(cls, obj: bpy.types.Object, clipboard: ClipboardData):
         pass
 
     @classmethod
-    def deserialize_shape_keys(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
+    def deserialize_vertex_groups(cls, obj: bpy.types.Object, clipboard: ClipboardData):
         pass
 
     @classmethod
-    def deserialize_vertex_groups(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
+    def deserialize_materials(cls, obj: bpy.types.Object, clipboard: ClipboardData):
         pass
 
     @classmethod
-    def deserialize_materials(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
-        pass
+    def ensure_attributes_on_object(cls, obj: bpy.types.Object, clipboard: ClipboardData):
+        attributes = clipboard.attributes
+        for name, a in attributes:
+            if name not in obj.data.attributes:
+                obj.data.attributes.new(name=name, type=a["data_type"], domain=a["domain"])
+                return
+
+            if obj.data.attributes[name].data_type != a["data_type"] or obj.data.attributes[name].domain != a["domain"]:
+                obj.data.attributes.new(name=f"{name}_pasted", type=a["data_type"], domain=a["domain"])
+
+    @classmethod
+    def ensure_attributes_on_bmesh(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
+        attributes = clipboard.attributes
+        for name, a in attributes.items():
+            domain = getattr(bm, cls._get_bmesh_domain(a["domain"]))
+            if not domain:
+                continue
+
+            match a["data_type"]:
+                case "FLOAT":
+                    attr = domain.layers.float.get(name)
+                    if not attr:
+                        domain.layers.float.new(name)
+
+                case "INT":
+                    attr = domain.layers.int.get(name)
+                    if not attr:
+                        domain.layers.int.new(name)
+
+                case "BOOLEAN":
+                    attr = domain.layers.bool.get(name)
+                    if not attr:
+                        domain.layers.bool.new(name)
+
+                case "FLOAT_VECTOR":
+                    attr = domain.layers.float_vector.get(name)
+                    if not attr:
+                        domain.layers.float_vector.new(name)
+
+                case "FLOAT_COLOR":
+                    attr = domain.layers.float_color.get(name)
+                    if not attr:
+                        domain.layers.float_color.new(name)
+
+                case "QUATERNION":
+                    pass
+
+                case "FLOAT4X4":
+                    pass
+
+                case "STRING":
+                    attr = domain.layers.string.get(name)
+                    if not attr:
+                        domain.layers.string.new(name)
+
+                case "INT8":
+                    attr = domain.layers.int.get(name)
+                    if not attr:
+                        domain.layers.int.new(name)
+
+                case "INT16_2D":
+                    attr = domain.layers.int.get(name)
+                    if not attr:
+                        domain.layers.int.new(name)
+
+                case "INT32_2D":
+                    attr = domain.layers.int.get(name)
+                    if not attr:
+                        domain.layers.int.new(name)
+
+                case "FLOAT2":
+                    attr = domain.layers.float.get(name)
+                    if not attr:
+                        domain.layers.float.new(name)
+
+                case "BYTE_COLOR":
+                    attr = domain.layers.color.get(name)
+                    if not attr:
+                        domain.layers.color.new(name)
+                case _:
+                    pass
+
+    @classmethod
+    def _get_bmesh_domain(cls, domain_name: str) -> str:
+        match domain_name:
+            case "POINT":
+                return "verts"
+            case "EDGE":
+                return "edges"
+            case "FACE":
+                return "faces"
+            case "CORNER":
+                return "loops"
+            case "CURVE":
+                return "curves"
+            case "INSTANCE":
+                return "instance"
+            case "LAYER":
+                return "layer"
+            case _:
+                return ""
