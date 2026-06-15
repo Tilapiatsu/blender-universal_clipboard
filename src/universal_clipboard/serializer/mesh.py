@@ -1,14 +1,14 @@
 import bpy
 import bmesh
 
-from ..clipboard import ClipboardData
+from ..clipboard import ClipboardData, AttributeData
 
 ATTRIBUTE_FIELDS = {
     "FLOAT": "value",
     "INT": "value",
     "INT8": "value",
-    "INT16_2D": "vector",
-    "INT32_2D": "vector",
+    "INT16_2D": "value",
+    "INT32_2D": "value",
     "BOOLEAN": "value",
     "FLOAT_VECTOR": "vector",
     "FLOAT_COLOR": "color",
@@ -46,14 +46,17 @@ class Serializer:
         result = {}
 
         for attr in mesh.attributes:
-            result[attr.name] = cls._serialize_attribute(attr, selected_verts)
+            attribute_data = AttributeData(name=attr.name, domain=attr.domain, data_type=attr.data_type)
+            cls._serialize_attribute(attr, attribute_data, selected_verts)
+            result[attr.name] = attribute_data
 
         return result
 
     @classmethod
-    def _serialize_attribute(cls, attr, selected_verts: set[int]) -> dict:
+    def _serialize_attribute(cls, attr, attribute_data: AttributeData, selected_verts: set[int]):
         field = ATTRIBUTE_FIELDS[attr.data_type]
-        values = []
+
+        print(attr.name, attr.data_type, field)
         for i, elem in enumerate(attr.data):
             if i not in selected_verts:
                 continue
@@ -62,9 +65,7 @@ class Serializer:
             if hasattr(value, "__iter__"):
                 value = tuple(value)
 
-            values.append(value)
-
-        return {"domain": attr.domain, "data_type": attr.data_type, "values": values}
+            attribute_data[i] = value
 
     @classmethod
     def serialize_shape_keys(cls, obj: bpy.types.Object, selected_verts: set[int]) -> dict:
@@ -74,7 +75,7 @@ class Serializer:
             return result
 
         for block in keys.key_blocks:
-            result[block.name] = [tuple(block.data[src_idx].co) for src_idx in selected_verts]
+            result[block.name] = {src_idx: tuple(block.data[src_idx].co) for src_idx in selected_verts}
 
         return result
 
@@ -101,15 +102,15 @@ class Serializer:
         # face_materials = [poly.material_index for poly in obj.data.polygons]
 
         materials = {}
-        face_materials = []
+        face_materials = {}
 
         sel_verts = set(selected_verts)
-        for poly in obj.data.polygons:
+        for i, poly in enumerate(obj.data.polygons):
             if not set(poly.vertices).issubset(sel_verts):
                 continue
 
             mat_index = poly.material_index
-            face_materials.append(mat_index)
+            face_materials[i] = mat_index
 
             if mat_index not in materials.keys():
                 materials[mat_index] = obj.data.materials[mat_index].name
@@ -147,11 +148,11 @@ class Deserializer:
 
     @classmethod
     def deserialize_attributes(cls, obj: bpy.types.Object, clipboard: ClipboardData):
-        return
+        # return
         src_attributes = clipboard.attributes
         dst_attributes = obj.data.attributes
 
-        for name, a in src_attributes.items:
+        for name, a in src_attributes.items():
             if name not in dst_attributes:
                 cls.ensure_attributes_on_object(obj, clipboard)
 
@@ -170,23 +171,23 @@ class Deserializer:
     @classmethod
     def ensure_attributes_on_object(cls, obj: bpy.types.Object, clipboard: ClipboardData):
         attributes = clipboard.attributes
-        for name, a in attributes:
+        for name, a in attributes.items():
             if name not in obj.data.attributes:
-                obj.data.attributes.new(name=name, type=a["data_type"], domain=a["domain"])
+                obj.data.attributes.new(name=name, type=a.data_type, domain=a.domain)
                 return
 
-            if obj.data.attributes[name].data_type != a["data_type"] or obj.data.attributes[name].domain != a["domain"]:
-                obj.data.attributes.new(name=f"{name}_pasted", type=a["data_type"], domain=a["domain"])
+            if obj.data.attributes[name].data_type != a.data_type or obj.data.attributes[name].domain != a.domain:
+                obj.data.attributes.new(name=f"{name}_pasted", type=a.data_type, domain=a.domain)
 
     @classmethod
     def ensure_attributes_on_bmesh(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
         attributes = clipboard.attributes
         for name, a in attributes.items():
-            domain = getattr(bm, cls._get_bmesh_domain(a["domain"]))
+            domain = getattr(bm, cls._get_bmesh_domain(a.domain))
             if not domain:
                 continue
 
-            match a["data_type"]:
+            match a.data_type:
                 case "FLOAT":
                     attr = domain.layers.float.get(name)
                     if not attr:

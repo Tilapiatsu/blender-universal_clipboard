@@ -18,6 +18,8 @@ class ClipboardHandler(P_ClipboardHandler):
         selected: set[int] = {v.index for v in bm.verts if v.select}
         fragment = cls._extract_selected_bmesh(bm)
 
+        bpy.ops.object.mode_set(mode="OBJECT")
+
         GLOBAL_CLIPBOARD = ClipboardData(
             object_type="MESH",
             geometry=Serializer.serialize_geometry(fragment),
@@ -27,11 +29,8 @@ class ClipboardHandler(P_ClipboardHandler):
             attributes=Serializer.serialize_attributes(obj.data, selected),
         )
 
-        # mesh = bpy.data.meshes.new("UCB_clipboard_mesh")
-        # fragment.normal_update()
-        # fragment.to_mesh(mesh)
-        # clipboard = bpy.data.objects.new("UCB_clipboard", mesh)
-        # context.scene.collection.objects.link(clipboard)
+        bpy.ops.object.mode_set(mode="EDIT")
+        print(GLOBAL_CLIPBOARD)
 
         fragment.free()
 
@@ -57,27 +56,36 @@ class ClipboardHandler(P_ClipboardHandler):
             "need to be in edit mode"
             return
 
+        GLOBAL_CLIPBOARD.init_mesh_remap()
         Deserializer.ensure_attributes_on_object(obj, GLOBAL_CLIPBOARD)
         bm = bmesh.from_edit_mesh(obj.data)
         src = Deserializer.deserialize_geometry(GLOBAL_CLIPBOARD)
         src.verts.ensure_lookup_table()
-        vert_map = {}
 
-        for v in src.verts:
+        remap_data = GLOBAL_CLIPBOARD.remap
+
+        if not remap_data:
+            return
+
+        for i, v in enumerate(src.verts):
             nv = bm.verts.new(v.co)
-            vert_map[v] = nv
+            remap_data.vertex[i] = nv
 
         bm.verts.ensure_lookup_table()
 
-        for f in src.faces:
+        for i, f in enumerate(src.faces):
             try:
-                bm.faces.new([vert_map[v] for v in f.verts])
+                face = bm.faces.new([remap_data.vertex[v.index] for v in f.verts])
+                remap_data.face[i] = face
+                for corner_idx, loop in enumerate(face.loops):
+                    remap_data.corner[(f.index, corner_idx)] = loop
             except:
                 pass
 
         for e in src.edges:
             try:
-                bm.edges.new((vert_map[e.verts[0]], vert_map[e.verts[1]]))
+                edge = bm.edges.new((remap_data.vertex[e.verts[0].index], remap_data.vertex[e.verts[1].index]))
+                remap_data.face[e] = edge
             except:
                 pass
 
