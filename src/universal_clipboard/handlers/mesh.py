@@ -66,12 +66,16 @@ class ClipboardHandler(P_ClipboardHandler):
         if not remap_data:
             return
 
+        created_verts = []
         for i, v in enumerate(src.verts):
             nv = bm.verts.new(v.co)
-            # ISSUE : nv get removed and cannot be used to remap the attributes properly afterwards
-            remap_data.vertex[i] = nv
+            created_verts.append(nv)
 
         bm.verts.ensure_lookup_table()
+        bm.verts.index_update()
+
+        for src_idx, v in enumerate(created_verts):
+            remap_data.vertex[src_idx] = v.index
 
         for i, f in enumerate(src.faces):
             try:
