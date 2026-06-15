@@ -56,7 +56,6 @@ class Serializer:
     def _serialize_attribute(cls, attr, attribute_data: AttributeData, selected_verts: set[int]):
         field = ATTRIBUTE_FIELDS[attr.data_type]
 
-        print(attr.name, attr.data_type, field)
         for i, elem in enumerate(attr.data):
             if i not in selected_verts:
                 continue
@@ -144,17 +143,44 @@ class Deserializer:
             except:
                 pass
 
+        bm.verts.index_update()
+        bm.edges.index_update()
+        bm.faces.index_update()
+
         return bm
 
     @classmethod
     def deserialize_attributes(cls, obj: bpy.types.Object, clipboard: ClipboardData):
-        # return
         src_attributes = clipboard.attributes
         dst_attributes = obj.data.attributes
 
+        bpy.ops.object.mode_set(mode="OBJECT")
         for name, a in src_attributes.items():
-            if name not in dst_attributes:
+            if (
+                name not in dst_attributes
+                or dst_attributes[name].domain != a.domain
+                or dst_attributes[name].data_type != a.data_type
+            ):
                 cls.ensure_attributes_on_object(obj, clipboard)
+
+            match a.domain:
+                case "POINT":
+                    print(src_attributes[name])
+                    for i, v in clipboard.remap.vertex.items():
+                        if i not in src_attributes[name].value.keys():
+                            continue
+                        # ISSUE : bmesh vertex "v" doesn't exists anymore, and cannot be used to remap the attributes
+                        dst_attributes[name].data[v.index] = src_attributes[name].value[i]
+                case "EDGE":
+                    pass
+                case "FACE":
+                    pass
+                case "CORNER":
+                    pass
+                case _:
+                    pass
+
+        bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod
     def deserialize_shape_keys(cls, obj: bpy.types.Object, clipboard: ClipboardData):
@@ -171,13 +197,18 @@ class Deserializer:
     @classmethod
     def ensure_attributes_on_object(cls, obj: bpy.types.Object, clipboard: ClipboardData):
         attributes = clipboard.attributes
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
         for name, a in attributes.items():
             if name not in obj.data.attributes:
                 obj.data.attributes.new(name=name, type=a.data_type, domain=a.domain)
-                return
+                continue
 
             if obj.data.attributes[name].data_type != a.data_type or obj.data.attributes[name].domain != a.domain:
                 obj.data.attributes.new(name=f"{name}_pasted", type=a.data_type, domain=a.domain)
+
+        bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod
     def ensure_attributes_on_bmesh(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):

@@ -30,7 +30,6 @@ class ClipboardHandler(P_ClipboardHandler):
         )
 
         bpy.ops.object.mode_set(mode="EDIT")
-        print(GLOBAL_CLIPBOARD)
 
         fragment.free()
 
@@ -69,6 +68,7 @@ class ClipboardHandler(P_ClipboardHandler):
 
         for i, v in enumerate(src.verts):
             nv = bm.verts.new(v.co)
+            # ISSUE : nv get removed and cannot be used to remap the attributes properly afterwards
             remap_data.vertex[i] = nv
 
         bm.verts.ensure_lookup_table()
@@ -82,10 +82,10 @@ class ClipboardHandler(P_ClipboardHandler):
             except:
                 pass
 
-        for e in src.edges:
+        for i, e in enumerate(src.edges):
             try:
                 edge = bm.edges.new((remap_data.vertex[e.verts[0].index], remap_data.vertex[e.verts[1].index]))
-                remap_data.face[e] = edge
+                remap_data.edge[i] = edge
             except:
                 pass
 

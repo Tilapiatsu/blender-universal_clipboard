@@ -1,0 +1,21 @@
+schema_version = "1.0.0"
+
+id = "universal_clipboard"
+version = "1.0.0"
+name = "Universal Clipboard"
+tagline = "Allows to copy/cut and paste mesh from one object to another"
+maintainer = "Tilapiatsu <tilapiatsu@hotmail.fr>"
+type = "add-on"
+
+website = "https://github.com/Tilapiatsu/blender-universal_clipboard"
+
+tags = ["Modeling", "Mesh", "Object"]
+
+blender_version_min = "4.0.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+
+copyright = ["2026 Tilapiatsu"]
+
+[build]
+paths_exclude_pattern = ["/.git/", "__pycache__/", ".gitignore"]
