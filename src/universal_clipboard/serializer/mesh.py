@@ -42,10 +42,13 @@ class Serializer:
         return result
 
     @classmethod
-    def serialize_attributes(cls, mesh: bpy.types.Mesh, selected_verts: set[int]) -> dict:
+    def serialize_attributes(cls, obj: bpy.types.Object, selected_verts: set[int]) -> dict:
+        mesh = obj.data
         result = {}
 
         for attr in mesh.attributes:
+            if attr.name.startswith(".") or attr.name in ["position"]:
+                continue
             attribute_data = AttributeData(name=attr.name, domain=attr.domain, data_type=attr.data_type)
             cls._serialize_attribute(attr, attribute_data, selected_verts)
             result[attr.name] = attribute_data
@@ -153,6 +156,7 @@ class Deserializer:
     def deserialize_attributes(cls, obj: bpy.types.Object, clipboard: ClipboardData):
         src_attributes = clipboard.attributes
         dst_attributes = obj.data.attributes
+        assert clipboard.remap
 
         bpy.ops.object.mode_set(mode="OBJECT")
         for name, a in src_attributes.items():
@@ -163,14 +167,16 @@ class Deserializer:
             ):
                 cls.ensure_attributes_on_object(obj, clipboard)
 
+            field = ATTRIBUTE_FIELDS[a.data_type]
             match a.domain:
                 case "POINT":
                     print(src_attributes[name])
-                    for i, v in clipboard.remap.vertex.items():
-                        if i not in src_attributes[name].value.keys():
+                    print("remap = ", clipboard.remap.vertex)
+                    for src_idx, dst_idx in clipboard.remap.vertex.items():
+                        if src_idx not in src_attributes[name].value.keys():
                             continue
-                        # ISSUE : bmesh vertex "v" doesn't exists anymore, and cannot be used to remap the attributes
-                        dst_attributes[name].data[v.index] = src_attributes[name].value[i]
+                        print(f"setting attribute for index {src_idx}")
+                        setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].value[src_idx])
                 case "EDGE":
                     pass
                 case "FACE":

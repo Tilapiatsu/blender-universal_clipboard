@@ -6,10 +6,18 @@ GLOBAL_CLIPBOARD = None
 
 @dataclass
 class MeshRemap:
-    vertex: dict
-    edge: dict
-    face: dict
-    corner: dict
+    """
+    This class is mapping the indices for each domain from source object to pasted object :
+    vertex : dict[src_index] = dst_index
+    edge : dict[src_index] = dst_index
+    face : dict[src_index] = dst_index
+    corner : dict[(src_face, local_corner)] = dst_loop_index
+    """
+
+    vertex: dict[int, int]
+    edge: dict[int, int]
+    face: dict[int, int]
+    corner: dict[tuple[int, int], int]
 
     def __init__(self) -> None:
         self.vertex = {}

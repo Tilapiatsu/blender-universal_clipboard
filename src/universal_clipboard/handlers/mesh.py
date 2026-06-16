@@ -26,7 +26,7 @@ class ClipboardHandler(P_ClipboardHandler):
             vertex_groups=Serializer.serialize_vertex_groups(obj, selected),
             shape_keys=Serializer.serialize_shape_keys(obj, selected),
             materials=Serializer.serialize_materials(obj, selected),
-            attributes=Serializer.serialize_attributes(obj.data, selected),
+            attributes=Serializer.serialize_attributes(obj, selected),
         )
 
         bpy.ops.object.mode_set(mode="EDIT")
@@ -67,7 +67,7 @@ class ClipboardHandler(P_ClipboardHandler):
             return
 
         created_verts = []
-        for i, v in enumerate(src.verts):
+        for _, v in enumerate(src.verts):
             nv = bm.verts.new(v.co)
             created_verts.append(nv)
 
@@ -77,30 +77,48 @@ class ClipboardHandler(P_ClipboardHandler):
         for src_idx, v in enumerate(created_verts):
             remap_data.vertex[src_idx] = v.index
 
-        for i, f in enumerate(src.faces):
+        created_faces = []
+        for _, f in enumerate(src.faces):
             try:
-                face = bm.faces.new([remap_data.vertex[v.index] for v in f.verts])
-                remap_data.face[i] = face
-                for corner_idx, loop in enumerate(face.loops):
-                    remap_data.corner[(f.index, corner_idx)] = loop
+                face = bm.faces.new([bm.verts[remap_data.vertex[v.index]] for v in f.verts])
+                created_faces.append(face)
             except:
                 pass
 
-        for i, e in enumerate(src.edges):
+        bm.faces.ensure_lookup_table()
+        bm.faces.index_update()
+
+        for src_idx, f in enumerate(created_faces):
+            remap_data.face[src_idx] = f.index
+            for corner_idx, loop in enumerate(f.loops):
+                remap_data.corner[(f.index, corner_idx)] = loop.index
+
+        created_edges = []
+        for _, e in enumerate(src.edges):
             try:
-                edge = bm.edges.new((remap_data.vertex[e.verts[0].index], remap_data.vertex[e.verts[1].index]))
-                remap_data.edge[i] = edge
+                edge = bm.edges.new(
+                    (bm.verts[remap_data.vertex[e.verts[0].index]], bm.verts[remap_data.vertex[e.verts[1].index]])
+                )
+                created_edges.append(edge)
             except:
                 pass
+
+        bm.edges.ensure_lookup_table()
+        bm.edges.index_update()
+
+        for src_idx, e in enumerate(created_edges):
+            remap_data.edge[src_idx] = e.index
 
         src.free()
 
         bmesh.update_edit_mesh(obj.data)
 
+        bpy.ops.object.mode_set(mode="OBJECT")
         Deserializer.deserialize_attributes(obj, GLOBAL_CLIPBOARD)
         Deserializer.deserialize_shape_keys(obj, GLOBAL_CLIPBOARD)
         Deserializer.deserialize_vertex_groups(obj, GLOBAL_CLIPBOARD)
         Deserializer.deserialize_materials(obj, GLOBAL_CLIPBOARD)
+        bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod
     def _extract_selected_bmesh(cls, src_bm: bmesh.types.BMesh) -> bmesh.types.BMesh:
