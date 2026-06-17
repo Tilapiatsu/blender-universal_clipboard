@@ -22,7 +22,7 @@ ATTRIBUTE_FIELDS = {
 
 class Serializer:
     @classmethod
-    def serialize_geometry(cls, bm: bmesh.types.BMesh) -> dict:
+    def serialize_geometry(cls, bm: bmesh.types.BMesh, selected_verts: set[int]) -> dict:
         bm.verts.ensure_lookup_table()
         bm.edges.ensure_lookup_table()
         bm.faces.ensure_lookup_table()
@@ -31,12 +31,14 @@ class Serializer:
         bm.edges.index_update()
         bm.faces.index_update()
 
-        vert_indices = {v: i for i, v in enumerate(bm.verts)}
+        vert_indices = {v: i for i, v in enumerate(bm.verts) if i in selected_verts}
+        edges_verts = [e for e in bm.edges if set([e.verts[0].index, e.verts[1].index]).issubset(selected_verts)]
+        faces_verts = [f for f in bm.faces if set([v.index for v in f.verts]).issubset(selected_verts)]
 
         result = {
-            "verts": [tuple(v.co) for v in bm.verts],
-            "edges": [(vert_indices[e.verts[0]], vert_indices[e.verts[1]]) for e in bm.edges],
-            "faces": [[vert_indices[v] for v in f.verts] for f in bm.faces],
+            "verts": {v.index: tuple(v.co) for v in bm.verts if v.index in selected_verts},
+            "edges": [(vert_indices[e.verts[0]], vert_indices[e.verts[1]]) for e in edges_verts],
+            "faces": [[vert_indices[v] for v in f.verts] for f in faces_verts],
         }
 
         return result
@@ -124,16 +126,25 @@ class Serializer:
 
 class Deserializer:
     @classmethod
-    def deserialize_geometry(cls, clipboard: ClipboardData) -> bmesh.types.BMesh:
-        bm = bmesh.new()
-        verts = []
+    def deserialize_geometry(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData) -> bmesh.types.BMesh:
+        verts = {}
         data = clipboard.geometry
 
-        for co in data["verts"]:
-            verts.append(bm.verts.new(co))
+        remap_data = clipboard.remap
+
+        if not remap_data:
+            return
+
+        for i, co in data["verts"].items():
+            verts[i] = bm.verts.new(co)
 
         bm.verts.ensure_lookup_table()
+        bm.verts.index_update()
 
+        for src_idx, v in verts.items():
+            remap_data.vertex[src_idx] = v.index
+
+        # TODO : Continue to write remap properly for face and edges
         for face in data["faces"]:
             try:
                 bm.faces.new([verts[i] for i in face])

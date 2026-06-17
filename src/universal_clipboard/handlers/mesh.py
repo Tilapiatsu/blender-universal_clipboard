@@ -16,22 +16,21 @@ class ClipboardHandler(P_ClipboardHandler):
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         selected: set[int] = {v.index for v in bm.verts if v.select}
-        fragment = cls._extract_selected_bmesh(bm)
+        geometry = Serializer.serialize_geometry(bm, selected)
 
         bpy.ops.object.mode_set(mode="OBJECT")
 
         GLOBAL_CLIPBOARD = ClipboardData(
             object_type="MESH",
-            geometry=Serializer.serialize_geometry(fragment),
+            geometry=geometry,
             vertex_groups=Serializer.serialize_vertex_groups(obj, selected),
             shape_keys=Serializer.serialize_shape_keys(obj, selected),
             materials=Serializer.serialize_materials(obj, selected),
             attributes=Serializer.serialize_attributes(obj, selected),
         )
 
+        print(GLOBAL_CLIPBOARD.geometry)
         bpy.ops.object.mode_set(mode="EDIT")
-
-        fragment.free()
 
     @classmethod
     def cut(cls, context):
@@ -58,59 +57,61 @@ class ClipboardHandler(P_ClipboardHandler):
         GLOBAL_CLIPBOARD.init_mesh_remap()
         Deserializer.ensure_attributes_on_object(obj, GLOBAL_CLIPBOARD)
         bm = bmesh.from_edit_mesh(obj.data)
-        src = Deserializer.deserialize_geometry(GLOBAL_CLIPBOARD)
+        # TODO : Need to modify deserialize_geometry to also write the attributes at the same time ? need to remap the
+        # source and target mesh properly
+        src = Deserializer.deserialize_geometry(bm, GLOBAL_CLIPBOARD)
         src.verts.ensure_lookup_table()
 
-        remap_data = GLOBAL_CLIPBOARD.remap
-
-        if not remap_data:
-            return
-
-        created_verts = []
-        for _, v in enumerate(src.verts):
-            nv = bm.verts.new(v.co)
-            created_verts.append(nv)
-
-        bm.verts.ensure_lookup_table()
-        bm.verts.index_update()
-
-        for src_idx, v in enumerate(created_verts):
-            remap_data.vertex[src_idx] = v.index
-
-        created_faces = []
-        for _, f in enumerate(src.faces):
-            try:
-                face = bm.faces.new([bm.verts[remap_data.vertex[v.index]] for v in f.verts])
-                created_faces.append(face)
-            except:
-                pass
-
-        bm.faces.ensure_lookup_table()
-        bm.faces.index_update()
-
-        for src_idx, f in enumerate(created_faces):
-            remap_data.face[src_idx] = f.index
-            for corner_idx, loop in enumerate(f.loops):
-                remap_data.corner[(f.index, corner_idx)] = loop.index
-
-        created_edges = []
-        for _, e in enumerate(src.edges):
-            try:
-                edge = bm.edges.new(
-                    (bm.verts[remap_data.vertex[e.verts[0].index]], bm.verts[remap_data.vertex[e.verts[1].index]])
-                )
-                created_edges.append(edge)
-            except:
-                pass
-
-        bm.edges.ensure_lookup_table()
-        bm.edges.index_update()
-
-        for src_idx, e in enumerate(created_edges):
-            remap_data.edge[src_idx] = e.index
-
-        src.free()
-
+        # remap_data = GLOBAL_CLIPBOARD.remap
+        #
+        # if not remap_data:
+        #     return
+        #
+        # created_verts = []
+        # for _, v in enumerate(src.verts):
+        #     nv = bm.verts.new(v.co)
+        #     created_verts.append(nv)
+        #
+        # bm.verts.ensure_lookup_table()
+        # bm.verts.index_update()
+        #
+        # for src_idx, v in enumerate(created_verts):
+        #     remap_data.vertex[src_idx] = v.index
+        #
+        # created_faces = []
+        # for _, f in enumerate(src.faces):
+        #     try:
+        #         face = bm.faces.new([bm.verts[remap_data.vertex[v.index]] for v in f.verts])
+        #         created_faces.append(face)
+        #     except:
+        #         pass
+        #
+        # bm.faces.ensure_lookup_table()
+        # bm.faces.index_update()
+        #
+        # for src_idx, f in enumerate(created_faces):
+        #     remap_data.face[src_idx] = f.index
+        #     for corner_idx, loop in enumerate(f.loops):
+        #         remap_data.corner[(f.index, corner_idx)] = loop.index
+        #
+        # created_edges = []
+        # for _, e in enumerate(src.edges):
+        #     try:
+        #         edge = bm.edges.new(
+        #             (bm.verts[remap_data.vertex[e.verts[0].index]], bm.verts[remap_data.vertex[e.verts[1].index]])
+        #         )
+        #         created_edges.append(edge)
+        #     except:
+        #         pass
+        #
+        # bm.edges.ensure_lookup_table()
+        # bm.edges.index_update()
+        #
+        # for src_idx, e in enumerate(created_edges):
+        #     remap_data.edge[src_idx] = e.index
+        #
+        # src.free()
+        #
         bmesh.update_edit_mesh(obj.data)
 
         bpy.ops.object.mode_set(mode="OBJECT")
