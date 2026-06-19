@@ -39,7 +39,7 @@ class Serializer:
 
         mg.verts = {v.index: tuple(v.co) for v in bm.verts if v.index in selected_verts}
         mg.edges = {e.index: (vert_indices[e.verts[0]], vert_indices[e.verts[1]], e.index) for e in edges_verts}
-        mg.faces = [[vert_indices[v] for v in f.verts] for f in faces_verts]
+        mg.faces = {f.index: [vert_indices[v] for v in f.verts] for f in faces_verts}
 
         return mg
 
@@ -220,11 +220,11 @@ class Deserializer:
         for src_idx, v in verts.items():
             remap_data.vertex[src_idx] = v.index
 
-        created_faces = []
-        for face in data.faces:
+        created_faces = {}
+        for src_idx, face in data.faces.items():
             try:
                 new_face = bm.faces.new([verts[i] for i in face])
-                created_faces.append(new_face)
+                created_faces[src_idx] = new_face
             except:
                 pass
 
@@ -233,14 +233,14 @@ class Deserializer:
         bm.edges.ensure_lookup_table()
         bm.edges.index_update()
 
-        for src_idx, f in enumerate(created_faces):
+        for src_idx, f in created_faces.items():
             remap_data.face[src_idx] = f.index
             for corner_idx, loop in enumerate(f.loops):
                 remap_data.corner[(f.index, corner_idx)] = loop.index
 
         edges_of_created_face = {}
 
-        for f in created_faces:
+        for _, f in created_faces.items():
             for e in f.edges:
                 if e in edges_of_created_face.values():
                     continue
@@ -306,9 +306,27 @@ class Deserializer:
                         setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].data[src_idx])
 
                 case "FACE":
-                    pass
+                    for src_idx, dst_idx in clipboard.remap.face.items():
+                        if src_idx not in src_keys:
+                            continue
+
+                        # print(f"set attribute {name} : {src_idx} -> {dst_idx}={src_attributes[name].data[src_idx]}")
+                        if name == "material_index":
+                            setattr(
+                                dst_attributes[name].data[dst_idx],
+                                field,
+                                clipboard.remap.material_id[src_attributes[name].data[src_idx]],
+                            )
+                        else:
+                            setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].data[src_idx])
+
                 case "CORNER":
-                    pass
+                    for src_idx, dst_idx in clipboard.remap.corner.items():
+                        if src_idx not in src_keys:
+                            continue
+
+                        # print(f"set attribute {name} : {src_idx} -> {dst_idx}={src_attributes[name].data[src_idx]}")
+                        setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].data[src_idx])
                 case _:
                     pass
 
@@ -324,7 +342,22 @@ class Deserializer:
 
     @classmethod
     def deserialize_materials(cls, obj: bpy.types.Object, clipboard: ClipboardData):
-        pass
+        assert clipboard.remap
+        init_mat_count = len(obj.data.materials)
+        init_materials = {i: m.name for i, m in enumerate(obj.data.materials)}
+
+        materials = clipboard.materials["materials"]
+        idx_offset = 0
+
+        for id, mat in materials.items():
+            if mat not in init_materials.values():
+                obj.data.materials.append(bpy.data.materials[mat])
+                clipboard.remap.material_id[id] = init_mat_count + idx_offset
+                idx_offset += 1
+            else:
+                for init_id, init_mat in init_materials.items():
+                    if mat == init_mat:
+                        clipboard.remap.material_id[id] = init_id
 
     @classmethod
     def ensure_attributes_on_object(cls, obj: bpy.types.Object, clipboard: ClipboardData):
@@ -341,7 +374,7 @@ class Deserializer:
                 if name in ["sharp_edge", "uv_seam"]:
                     setattr(obj.data.attributes[name].data[0], "value", True)
                 if name in ["material_index"]:
-                    setattr(obj.data.attributes[name].data[0], "value", 0)
+                    setattr(obj.data.attributes[name].data[0], "value", 1)
                 continue
 
             if obj.data.attributes[name].data_type != a.data_type or obj.data.attributes[name].domain != a.domain:

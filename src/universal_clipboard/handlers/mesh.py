@@ -63,10 +63,10 @@ class ClipboardHandler(P_ClipboardHandler):
         bmesh.update_edit_mesh(obj.data)
 
         bpy.ops.object.mode_set(mode="OBJECT")
-        Deserializer.deserialize_attributes(obj, GLOBAL_CLIPBOARD)
+        Deserializer.deserialize_materials(obj, GLOBAL_CLIPBOARD)
         Deserializer.deserialize_shape_keys(obj, GLOBAL_CLIPBOARD)
         Deserializer.deserialize_vertex_groups(obj, GLOBAL_CLIPBOARD)
-        Deserializer.deserialize_materials(obj, GLOBAL_CLIPBOARD)
+        Deserializer.deserialize_attributes(obj, GLOBAL_CLIPBOARD)
         bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod

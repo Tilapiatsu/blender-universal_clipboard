@@ -19,12 +19,14 @@ class MeshRemap:
     edge: dict[int, int]
     face: dict[int, int]
     corner: dict[tuple[int, int], int]
+    material_id: dict[int, int]
 
     def __init__(self) -> None:
         self.vertex = {}
         self.edge = {}
         self.face = {}
         self.corner = {}
+        self.material_id = {}
 
 
 @dataclass
@@ -35,12 +37,12 @@ class MeshGeometry:
 
     verts: dict
     edges: dict
-    faces: list
+    faces: dict
 
     def __init__(self) -> None:
         self.verts = {}
         self.edges = {}
-        self.faces = []
+        self.faces = {}
 
 
 @dataclass
