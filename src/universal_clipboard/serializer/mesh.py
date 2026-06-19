@@ -1,7 +1,7 @@
 import bpy
 import bmesh
 
-from ..clipboard import ClipboardData, AttributeData
+from ..clipboard import ClipboardData, AttributeData, MeshGeometry
 
 ATTRIBUTE_FIELDS = {
     "FLOAT": "value",
@@ -22,7 +22,7 @@ ATTRIBUTE_FIELDS = {
 
 class Serializer:
     @classmethod
-    def serialize_geometry(cls, bm: bmesh.types.BMesh, selected_verts: set[int]) -> dict:
+    def serialize_geometry(cls, bm: bmesh.types.BMesh, selected_verts: set[int]) -> MeshGeometry:
         bm.verts.ensure_lookup_table()
         bm.edges.ensure_lookup_table()
         bm.faces.ensure_lookup_table()
@@ -31,45 +31,89 @@ class Serializer:
         bm.edges.index_update()
         bm.faces.index_update()
 
+        mg = MeshGeometry()
+
         vert_indices = {v: i for i, v in enumerate(bm.verts) if i in selected_verts}
         edges_verts = [e for e in bm.edges if set([e.verts[0].index, e.verts[1].index]).issubset(selected_verts)]
         faces_verts = [f for f in bm.faces if set([v.index for v in f.verts]).issubset(selected_verts)]
 
-        result = {
-            "verts": {v.index: tuple(v.co) for v in bm.verts if v.index in selected_verts},
-            "edges": [(vert_indices[e.verts[0]], vert_indices[e.verts[1]]) for e in edges_verts],
-            "faces": [[vert_indices[v] for v in f.verts] for f in faces_verts],
-        }
+        mg.verts = {v.index: tuple(v.co) for v in bm.verts if v.index in selected_verts}
+        mg.edges = {e.index: (vert_indices[e.verts[0]], vert_indices[e.verts[1]], e.index) for e in edges_verts}
+        mg.faces = [[vert_indices[v] for v in f.verts] for f in faces_verts]
 
-        return result
+        return mg
 
     @classmethod
     def serialize_attributes(cls, obj: bpy.types.Object, selected_verts: set[int]) -> dict:
         mesh = obj.data
         result = {}
+        selected_edges = cls._get_selected_domain(mesh, selected_verts, "EDGE")
+        selected_faces = cls._get_selected_domain(mesh, selected_verts, "FACE")
+        selected_corners = {}
+
+        for poly in mesh.polygons:
+            if poly.index not in selected_faces:
+                continue
+
+            for local_corner, loop_idx in enumerate(range(poly.loop_start, poly.loop_start + poly.loop_total)):
+                selected_corners[(poly.index, local_corner)] = loop_idx
 
         for attr in mesh.attributes:
             if attr.name.startswith(".") or attr.name in ["position"]:
                 continue
             attribute_data = AttributeData(name=attr.name, domain=attr.domain, data_type=attr.data_type)
-            cls._serialize_attribute(attr, attribute_data, selected_verts)
+            cls._serialize_attribute(
+                attr, attribute_data, selected_verts, selected_edges, selected_faces, selected_corners
+            )
             result[attr.name] = attribute_data
 
         return result
 
     @classmethod
-    def _serialize_attribute(cls, attr, attribute_data: AttributeData, selected_verts: set[int]):
+    def _serialize_attribute(
+        cls,
+        attr,
+        attribute_data: AttributeData,
+        selected_verts: set[int],
+        selected_edges: set[int],
+        selected_faces: set[int],
+        selected_corners: dict,
+    ):
         field = ATTRIBUTE_FIELDS[attr.data_type]
 
-        for i, elem in enumerate(attr.data):
-            if i not in selected_verts:
+        selected = {"POINT": selected_verts, "EDGE": selected_edges, "FACE": selected_faces, "CORNER": selected_corners}
+
+        # print(attr.name, attr.domain, attr.data_type, selected[attr.domain])
+
+        if attr.domain == "CORNER":
+            for key, idx in selected[attr.domain].items():
+                value = cls._serialize_attribute_value(attr.data[idx])
+                attribute_data[key] = value
+        else:
+            for idx in selected[attr.domain]:
+                value = cls._serialize_attribute_value(attr.data[idx])
+                attribute_data[idx] = value
+
+    @staticmethod
+    def _serialize_attribute_value(elem):
+        result = {}
+
+        for prop in elem.bl_rna.properties:
+            if prop.identifier == "rna_type":
                 continue
 
-            value = getattr(elem, field)
-            if hasattr(value, "__iter__"):
-                value = tuple(value)
+            try:
+                value = getattr(elem, prop.identifier)
 
-            attribute_data[i] = value
+                if hasattr(value, "__iter__") and not isinstance(value, str):
+                    value = tuple(value)
+
+                result = value
+
+            except Exception:
+                pass
+
+        return result
 
     @classmethod
     def serialize_shape_keys(cls, obj: bpy.types.Object, selected_verts: set[int]) -> dict:
@@ -109,10 +153,13 @@ class Serializer:
         face_materials = {}
 
         sel_verts = set(selected_verts)
+
+        if not len(obj.data.materials):
+            return {}
+
         for i, poly in enumerate(obj.data.polygons):
             if not set(poly.vertices).issubset(sel_verts):
                 continue
-
             mat_index = poly.material_index
             face_materials[i] = mat_index
 
@@ -122,6 +169,35 @@ class Serializer:
         result = {"materials": materials, "face_materials": face_materials}
 
         return result
+
+    @classmethod
+    def _get_selected_domain(cls, mesh: bpy.types.Mesh, selected_verts: set[int], domain: str) -> set[int]:
+        match domain:
+            case "POINT":
+                return selected_verts
+            case "EDGE":
+                selected = set({})
+                for e in mesh.edges:
+                    verts = [v for v in e.vertices]
+                    if not set(verts).issubset(selected_verts):
+                        continue
+
+                    selected.update([e.index])
+
+                return selected
+            case "FACE":
+                selected = set({})
+                for f in mesh.polygons:
+                    face = [v for v in f.vertices]
+                    if not set(face).issubset(selected_verts):
+                        continue
+                    selected.update([f.index])
+
+                return selected
+            case "CORNER":
+                return selected_verts
+            case _:
+                return selected_verts
 
 
 class Deserializer:
@@ -135,7 +211,7 @@ class Deserializer:
         if not remap_data:
             return
 
-        for i, co in data["verts"].items():
+        for i, co in data.verts.items():
             verts[i] = bm.verts.new(co)
 
         bm.verts.ensure_lookup_table()
@@ -144,24 +220,53 @@ class Deserializer:
         for src_idx, v in verts.items():
             remap_data.vertex[src_idx] = v.index
 
-        # TODO : Continue to write remap properly for face and edges
-        for face in data["faces"]:
+        created_faces = []
+        for face in data.faces:
             try:
-                bm.faces.new([verts[i] for i in face])
+                new_face = bm.faces.new([verts[i] for i in face])
+                created_faces.append(new_face)
             except:
                 pass
 
-        for edges in data["edges"]:
-            try:
-                bm.edges.new((verts[edges["verts"][0]], verts[edges["verts"][1]]))
-            except:
-                pass
-
-        bm.verts.index_update()
-        bm.edges.index_update()
+        bm.faces.ensure_lookup_table()
         bm.faces.index_update()
+        bm.edges.ensure_lookup_table()
+        bm.edges.index_update()
 
-        return bm
+        for src_idx, f in enumerate(created_faces):
+            remap_data.face[src_idx] = f.index
+            for corner_idx, loop in enumerate(f.loops):
+                remap_data.corner[(f.index, corner_idx)] = loop.index
+
+        edges_of_created_face = {}
+
+        for f in created_faces:
+            for e in f.edges:
+                if e in edges_of_created_face.values():
+                    continue
+                edges_of_created_face[(e.verts[0], e.verts[1])] = e
+
+        created_edges = {}
+        for src_idx, edge in data.edges.items():
+            edge_verts = (verts[edge[0]], verts[edge[1]])
+            try:
+                new_edge = bm.edges.new(edge_verts)
+                created_edges[src_idx] = new_edge
+            except:
+                if edge_verts in edges_of_created_face.keys():
+                    created_edges[src_idx] = edges_of_created_face[edge_verts]
+                elif tuple(reversed(edge_verts)) in edges_of_created_face.keys():
+                    created_edges[src_idx] = edges_of_created_face[tuple(reversed(edge_verts))]
+                else:
+                    print("edge not found")
+
+        bm.edges.ensure_lookup_table()
+        bm.edges.index_update()
+
+        for src_idx, e in created_edges.items():
+            remap_data.edge[src_idx] = e.index
+
+        bm.free()
 
     @classmethod
     def deserialize_attributes(cls, obj: bpy.types.Object, clipboard: ClipboardData):
@@ -169,27 +274,37 @@ class Deserializer:
         dst_attributes = obj.data.attributes
         assert clipboard.remap
 
+        # print([a.name for a in dst_attributes])
+
         bpy.ops.object.mode_set(mode="OBJECT")
         for name, a in src_attributes.items():
             if (
-                name not in dst_attributes
+                name not in dst_attributes.keys()
                 or dst_attributes[name].domain != a.domain
                 or dst_attributes[name].data_type != a.data_type
             ):
                 cls.ensure_attributes_on_object(obj, clipboard)
+                bpy.ops.object.mode_set(mode="EDIT")
+                bpy.ops.object.mode_set(mode="OBJECT")
 
             field = ATTRIBUTE_FIELDS[a.data_type]
+            src_keys = src_attributes[name].data.keys()
+            # print(src_attributes[name].data)
             match a.domain:
                 case "POINT":
-                    print(src_attributes[name])
-                    print("remap = ", clipboard.remap.vertex)
                     for src_idx, dst_idx in clipboard.remap.vertex.items():
-                        if src_idx not in src_attributes[name].value.keys():
+                        if src_idx not in src_keys:
                             continue
-                        print(f"setting attribute for index {src_idx}")
-                        setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].value[src_idx])
+                        setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].data[src_idx])
+
                 case "EDGE":
-                    pass
+                    for src_idx, dst_idx in clipboard.remap.edge.items():
+                        if src_idx not in src_keys:
+                            continue
+
+                        # print(f"set attribute {name} : {src_idx} -> {dst_idx}={src_attributes[name].data[src_idx]}")
+                        setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].data[src_idx])
+
                 case "FACE":
                     pass
                 case "CORNER":
@@ -218,13 +333,21 @@ class Deserializer:
         bpy.ops.object.mode_set(mode="OBJECT")
 
         for name, a in attributes.items():
-            if name not in obj.data.attributes:
+            if name not in obj.data.attributes.keys():
+                print(f"creating attribute {name}")
                 obj.data.attributes.new(name=name, type=a.data_type, domain=a.domain)
+                if not len(obj.data.attributes[name].data):
+                    continue
+                if name in ["sharp_edge", "uv_seam"]:
+                    setattr(obj.data.attributes[name].data[0], "value", True)
+                if name in ["material_index"]:
+                    setattr(obj.data.attributes[name].data[0], "value", 0)
                 continue
 
             if obj.data.attributes[name].data_type != a.data_type or obj.data.attributes[name].domain != a.domain:
                 obj.data.attributes.new(name=f"{name}_pasted", type=a.data_type, domain=a.domain)
 
+        obj.data.update()
         bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod
@@ -318,3 +441,11 @@ class Deserializer:
                 return "layer"
             case _:
                 return ""
+
+    @classmethod
+    def _get_edge_from_verts(cls, bm: bmesh.types.BMesh, edge_verts: tuple[int, int]):
+        for e in bm.edges:
+            if set(edge_verts).issubset(e.verts):
+                return e
+
+        return None

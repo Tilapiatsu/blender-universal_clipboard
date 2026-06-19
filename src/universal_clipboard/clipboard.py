@@ -1,4 +1,5 @@
-from dataclasses import dataclass, field
+import bmesh
+from dataclasses import dataclass
 from typing import Any, Union
 
 GLOBAL_CLIPBOARD = None
@@ -27,41 +28,57 @@ class MeshRemap:
 
 
 @dataclass
+class MeshGeometry:
+    """
+    This class stores the indices of the copied mesh
+    """
+
+    verts: dict
+    edges: dict
+    faces: list
+
+    def __init__(self) -> None:
+        self.verts = {}
+        self.edges = {}
+        self.faces = []
+
+
+@dataclass
 class AttributeData:
     name: str
     domain: str
     data_type: str
-    value: dict
+    data: dict
 
     def __init__(self, name: str, domain: str, data_type: str) -> None:
         self.name = name
         self.domain = domain
         self.data_type = data_type
-        self.value = {}
+        self.data = {}
 
     def __getitem__(self, key: Any) -> Any:
-        if key not in self.value.keys():
+        if key not in self.data.keys():
             return None
 
-        return self.value[key]
+        return self.data[key]
 
     def __setitem__(self, key: Any, value: Any) -> None:
-        self.value[key] = value
+        self.data[key] = value
 
     def keys(self):
-        return self.value.keys()
+        return self.data.keys()
 
     def values(self):
-        return self.value.values()
+        return self.data.values()
 
     def items(self):
-        return self.value.items()
+        return self.data.items()
 
 
 @dataclass
 class ClipboardData:
     object_type: str
-    geometry: dict
+    geometry: MeshGeometry
     vertex_groups: dict
     shape_keys: dict
     materials: dict
@@ -70,3 +87,6 @@ class ClipboardData:
 
     def init_mesh_remap(self) -> None:
         self.remap = MeshRemap()
+
+    def init_mesh_geometry(self) -> None:
+        self.geometry = MeshGeometry()
