@@ -1,6 +1,6 @@
 import bpy
 import bmesh
-
+from mathutils import Vector
 from ..clipboard import ClipboardData, AttributeData, MeshGeometry
 
 ATTRIBUTE_FIELDS = {
@@ -202,7 +202,7 @@ class Serializer:
 
 class Deserializer:
     @classmethod
-    def deserialize_geometry(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData) -> bmesh.types.BMesh:
+    def deserialize_geometry(cls, obj: bpy.types.Object, clipboard: ClipboardData) -> bmesh.types.BMesh:
         verts = {}
         data = clipboard.geometry
 
@@ -211,8 +211,15 @@ class Deserializer:
         if not remap_data:
             return
 
+        bm = bmesh.from_edit_mesh(obj.data)
+
+        src_matrix = clipboard.obj.matrix_world
+        dst_matrix = obj.matrix_world.inverted()
+
         for i, co in data.verts.items():
-            verts[i] = bm.verts.new(co)
+            world = src_matrix @ Vector(co)
+            local = dst_matrix @ world
+            verts[i] = bm.verts.new(local)
 
         bm.verts.ensure_lookup_table()
         bm.verts.index_update()
@@ -267,6 +274,8 @@ class Deserializer:
             remap_data.edge[src_idx] = e.index
 
         bm.free()
+
+        bmesh.update_edit_mesh(obj.data)
 
     @classmethod
     def deserialize_attributes(cls, obj: bpy.types.Object, clipboard: ClipboardData):

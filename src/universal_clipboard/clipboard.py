@@ -1,3 +1,4 @@
+import bpy
 import bmesh
 from dataclasses import dataclass
 from typing import Any, Union
@@ -80,6 +81,7 @@ class AttributeData:
 @dataclass
 class ClipboardData:
     object_type: str
+    obj: bpy.types.Object
     geometry: MeshGeometry
     vertex_groups: dict
     shape_keys: dict

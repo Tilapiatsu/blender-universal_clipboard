@@ -22,6 +22,7 @@ class ClipboardHandler(P_ClipboardHandler):
 
         GLOBAL_CLIPBOARD = ClipboardData(
             object_type="MESH",
+            obj=obj,
             geometry=geometry,
             vertex_groups=Serializer.serialize_vertex_groups(obj, selected),
             shape_keys=Serializer.serialize_shape_keys(obj, selected),
@@ -55,12 +56,7 @@ class ClipboardHandler(P_ClipboardHandler):
 
         GLOBAL_CLIPBOARD.init_mesh_remap()
         Deserializer.ensure_attributes_on_object(obj, GLOBAL_CLIPBOARD)
-        bm = bmesh.from_edit_mesh(obj.data)
-        # TODO : Need to modify deserialize_geometry to also write the attributes at the same time ? need to remap the
-        # source and target mesh properly
-        Deserializer.deserialize_geometry(bm, GLOBAL_CLIPBOARD)
-
-        bmesh.update_edit_mesh(obj.data)
+        Deserializer.deserialize_geometry(obj, GLOBAL_CLIPBOARD)
 
         bpy.ops.object.mode_set(mode="OBJECT")
         Deserializer.deserialize_materials(obj, GLOBAL_CLIPBOARD)
