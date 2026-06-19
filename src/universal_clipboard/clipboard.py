@@ -18,7 +18,7 @@ class MeshRemap:
     vertex: dict[int, int]
     edge: dict[int, int]
     face: dict[int, int]
-    corner: dict[tuple[int, int], int]
+    corner: dict[tuple[int, int], tuple[int, int]]
     material_id: dict[int, int]
 
     def __init__(self) -> None:

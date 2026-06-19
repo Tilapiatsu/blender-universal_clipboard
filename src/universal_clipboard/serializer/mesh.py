@@ -235,11 +235,11 @@ class Deserializer:
 
         for src_idx, f in created_faces.items():
             remap_data.face[src_idx] = f.index
+            f.loops.index_update()
             for corner_idx, loop in enumerate(f.loops):
-                remap_data.corner[(f.index, corner_idx)] = loop.index
+                remap_data.corner[(src_idx, corner_idx)] = (f.index, loop.index)
 
         edges_of_created_face = {}
-
         for _, f in created_faces.items():
             for e in f.edges:
                 if e in edges_of_created_face.values():
@@ -325,8 +325,10 @@ class Deserializer:
                         if src_idx not in src_keys:
                             continue
 
-                        # print(f"set attribute {name} : {src_idx} -> {dst_idx}={src_attributes[name].data[src_idx]}")
-                        setattr(dst_attributes[name].data[dst_idx], field, src_attributes[name].data[src_idx])
+                        poly = obj.data.polygons[dst_idx[0]]
+                        loop_idx = poly.loop_start + dst_idx[1]
+                        # print(f"set attribute {name} : {src_idx} -> {dst_idx} = {src_attributes[name].data[src_idx]}")
+                        setattr(dst_attributes[name].data[loop_idx], field, src_attributes[name].data[src_idx])
                 case _:
                     pass
 
@@ -367,12 +369,16 @@ class Deserializer:
 
         for name, a in attributes.items():
             if name not in obj.data.attributes.keys():
-                print(f"creating attribute {name}")
+                print(f"creating attribute {name}", a.data_type, a.domain)
                 obj.data.attributes.new(name=name, type=a.data_type, domain=a.domain)
                 if not len(obj.data.attributes[name].data):
                     continue
                 if name in ["sharp_edge", "uv_seam"]:
                     setattr(obj.data.attributes[name].data[0], "value", True)
+                    if "sharp_face" in obj.data.attributes:
+                        for sf in obj.data.attributes["sharp_face"].data:
+                            setattr(sf, "value", False)
+
                 if name in ["material_index"]:
                     setattr(obj.data.attributes[name].data[0], "value", 1)
                 continue
