@@ -217,6 +217,7 @@ class Deserializer:
             world = src_matrix @ Vector(co)
             local = dst_matrix @ world
             verts[i] = bm.verts.new(local)
+            verts[i].select_set(True)
 
         bm.verts.ensure_lookup_table()
         bm.verts.index_update()
@@ -338,6 +339,14 @@ class Deserializer:
                 case _:
                     pass
 
+        if "sharp_face" in dst_attributes and "sharp_face" not in src_attributes.keys():
+            attr = dst_attributes["sharp_face"]
+
+            field = ATTRIBUTE_FIELDS[attr.data_type]
+
+            for src_idx, dst_idx in clipboard.remap.face.items():
+                setattr(attr.data[dst_idx], field, False)
+
         bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod
@@ -397,7 +406,7 @@ class Deserializer:
                     setattr(obj.data.attributes[name].data[0], "value", True)
                     if "sharp_face" in obj.data.attributes:
                         for sf in obj.data.attributes["sharp_face"].data:
-                            setattr(sf, "value", False)
+                            setattr(sf, "value", True)
 
                 if name in ["material_index"]:
                     setattr(obj.data.attributes[name].data[0], "value", 1)

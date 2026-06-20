@@ -9,7 +9,7 @@ from ..serializer.mesh import Serializer, Deserializer
 
 class ClipboardHandler(P_ClipboardHandler):
     @classmethod
-    def copy(cls, context):
+    def copy(cls, context) -> tuple[int, str]:
 
         global GLOBAL_CLIPBOARD
 
@@ -32,27 +32,34 @@ class ClipboardHandler(P_ClipboardHandler):
 
         bpy.ops.object.mode_set(mode="EDIT")
 
+        return 0, f"{len(selected)} elements copied"
+
     @classmethod
-    def cut(cls, context):
-        cls.copy(context)
+    def cut(cls, context) -> tuple[int, str]:
+        msg = cls.copy(context)
+        if msg[0] == -1:
+            return msg
         obj = context.edit_object
         bm = bmesh.from_edit_mesh(obj.data)
         geom = [v for v in bm.verts if v.select] + [e for e in bm.edges if e.select] + [f for f in bm.faces if f.select]
         bmesh.ops.delete(bm, geom=geom, context="FACES")
         bmesh.update_edit_mesh(obj.data)
 
+        return 0, msg[1].replace("copied", "cuted")
+
     @classmethod
-    def paste(cls, context):
+    def paste(cls, context) -> tuple[int, str]:
 
         global GLOBAL_CLIPBOARD
 
         if GLOBAL_CLIPBOARD is None:
-            return
+            return -1, "Clipboard is Empty"
 
         obj = context.edit_object
         if not obj:
-            "need to be in edit mode"
-            return
+            return -1, "Need to be in edit mode"
+
+        bpy.ops.mesh.select_all(action="DESELECT")
 
         GLOBAL_CLIPBOARD.init_mesh_remap()
         Deserializer.ensure_attributes_on_object(obj, GLOBAL_CLIPBOARD)
@@ -64,6 +71,8 @@ class ClipboardHandler(P_ClipboardHandler):
         Deserializer.deserialize_vertex_groups(obj, GLOBAL_CLIPBOARD)
         Deserializer.deserialize_attributes(obj, GLOBAL_CLIPBOARD)
         bpy.ops.object.mode_set(mode="EDIT")
+
+        return 0, f"{len(GLOBAL_CLIPBOARD.geometry.verts)} elements pasted"
 
     @classmethod
     def _extract_selected_bmesh(cls, src_bm: bmesh.types.BMesh) -> bmesh.types.BMesh:

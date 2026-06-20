@@ -2,6 +2,16 @@ import bpy
 from .handlers import curve, grease_pencil, mesh, pointcloud
 
 
+def handle_errors(self, msg: tuple[int, str]):
+    match msg[0]:
+        case -1:
+            self.report({"ERROR"}, msg[1])
+        case 0:
+            self.report({"INFO"}, msg[1])
+        case _:
+            self.report({"ERROR", "Unknown Error"})
+
+
 class UCLIPBOARD_OT_copy(bpy.types.Operator):
     """
     Copy selected elements in clipboard
@@ -13,8 +23,8 @@ class UCLIPBOARD_OT_copy(bpy.types.Operator):
 
     def execute(self, context):
 
-        mesh.ClipboardHandler.copy(context)
-
+        msg = mesh.ClipboardHandler.copy(context)
+        handle_errors(self, msg)
         return {"FINISHED"}
 
 
@@ -29,7 +39,9 @@ class UCLIPBOARD_OT_cut(bpy.types.Operator):
 
     def execute(self, context):
 
-        mesh.ClipboardHandler.cut(context)
+        msg = mesh.ClipboardHandler.cut(context)
+
+        handle_errors(self, msg)
 
         return {"FINISHED"}
 
@@ -45,7 +57,9 @@ class UCLIPBOARD_OT_paste(bpy.types.Operator):
 
     def execute(self, context):
 
-        mesh.ClipboardHandler.paste(context)
+        msg = mesh.ClipboardHandler.paste(context)
+
+        handle_errors(self, msg)
 
         return {"FINISHED"}
 
