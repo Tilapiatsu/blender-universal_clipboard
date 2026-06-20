@@ -79,11 +79,9 @@ class Serializer:
         selected_faces: set[int],
         selected_corners: dict,
     ):
-        field = ATTRIBUTE_FIELDS[attr.data_type]
+        # field = ATTRIBUTE_FIELDS[attr.data_type]
 
         selected = {"POINT": selected_verts, "EDGE": selected_edges, "FACE": selected_faces, "CORNER": selected_corners}
-
-        # print(attr.name, attr.domain, attr.data_type, selected[attr.domain])
 
         if attr.domain == "CORNER":
             for key, idx in selected[attr.domain].items():
@@ -146,9 +144,6 @@ class Serializer:
 
     @classmethod
     def serialize_materials(cls, obj: bpy.types.Object, selected_verts: set[int]):
-        # materials = [mat.name if mat else None for mat in obj.data.materials]
-        # face_materials = [poly.material_index for poly in obj.data.polygons]
-
         materials = {}
         face_materials = {}
 
@@ -358,7 +353,14 @@ class Deserializer:
 
     @classmethod
     def deserialize_vertex_groups(cls, obj: bpy.types.Object, clipboard: ClipboardData):
-        pass
+        for name, weight in clipboard.vertex_groups.items():
+            if name not in obj.vertex_groups:
+                obj.vertex_groups.new(name=name)
+
+            target_vertex_group = obj.vertex_groups[name]
+
+            for src_idx, value in weight.items():
+                target_vertex_group.add([clipboard.remap.vertex[src_idx]], value, "REPLACE")
 
     @classmethod
     def deserialize_materials(cls, obj: bpy.types.Object, clipboard: ClipboardData):
