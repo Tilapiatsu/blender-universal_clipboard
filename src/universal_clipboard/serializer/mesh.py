@@ -164,6 +164,8 @@ class Serializer:
             face_materials[i] = mat_index
 
             if mat_index not in materials.keys():
+                if obj.data.materials[mat_index] is None:
+                    continue
                 materials[mat_index] = obj.data.materials[mat_index].name
 
         result = {"materials": materials, "face_materials": face_materials}
@@ -345,7 +347,14 @@ class Deserializer:
 
     @classmethod
     def deserialize_shape_keys(cls, obj: bpy.types.Object, clipboard: ClipboardData):
-        pass
+        for name, shape_key_values in clipboard.shape_keys.items():
+            if not obj.data.shape_keys or name not in obj.data.shape_keys:
+                obj.shape_key_add(name=name)
+
+            target_shape_keys = obj.data.shape_keys.key_blocks[name]
+
+            for src_idx, value in shape_key_values.items():
+                target_shape_keys.data[clipboard.remap.vertex[src_idx]].co = value
 
     @classmethod
     def deserialize_vertex_groups(cls, obj: bpy.types.Object, clipboard: ClipboardData):
@@ -397,6 +406,11 @@ class Deserializer:
 
         obj.data.update()
         bpy.ops.object.mode_set(mode="EDIT")
+
+    @staticmethod
+    def _get_local_pos(src_matrix, src_pos, dst_inv):
+        world = src_matrix @ src_pos
+        return dst_inv @ world
 
     @classmethod
     def ensure_attributes_on_bmesh(cls, bm: bmesh.types.BMesh, clipboard: ClipboardData):
