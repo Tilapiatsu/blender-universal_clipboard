@@ -28,6 +28,7 @@ class ClipboardHandler(P_ClipboardHandler):
             shape_keys=Serializer.serialize_shape_keys(obj, selected),
             materials=Serializer.serialize_materials(obj, selected),
             attributes=Serializer.serialize_attributes(obj, selected),
+            attribute_to_clean={},
         )
 
         bpy.ops.object.mode_set(mode="EDIT")

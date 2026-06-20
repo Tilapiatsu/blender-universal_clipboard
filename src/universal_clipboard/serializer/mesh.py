@@ -347,6 +347,11 @@ class Deserializer:
             for src_idx, dst_idx in clipboard.remap.face.items():
                 setattr(attr.data[dst_idx], field, False)
 
+        for name, value in clipboard.attribute_to_clean.items():
+            field = ATTRIBUTE_FIELDS[dst_attributes[name].data_type]
+
+            setattr(dst_attributes[name].data[0], field, value)
+
         bpy.ops.object.mode_set(mode="EDIT")
 
     @classmethod
@@ -404,6 +409,7 @@ class Deserializer:
                     continue
                 if name in ["sharp_edge", "uv_seam"]:
                     setattr(obj.data.attributes[name].data[0], "value", True)
+                    clipboard.attribute_to_clean[name] = False
                     if "sharp_face" in obj.data.attributes:
                         for sf in obj.data.attributes["sharp_face"].data:
                             setattr(sf, "value", True)

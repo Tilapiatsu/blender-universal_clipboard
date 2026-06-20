@@ -87,6 +87,7 @@ class ClipboardData:
     shape_keys: dict
     materials: dict
     attributes: dict[str, AttributeData]
+    attribute_to_clean: dict
     remap: Union[None, MeshRemap] = None
 
     def init_mesh_remap(self) -> None:
