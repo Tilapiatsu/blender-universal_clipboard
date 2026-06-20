@@ -3,8 +3,13 @@ from .handlers import curve, grease_pencil, mesh, pointcloud
 
 
 class UCLIPBOARD_OT_copy(bpy.types.Operator):
-    bl_idname = "uclipboard.copy"
+    """
+    Copy selected elements in clipboard
+    """
+
+    bl_idname = "view3d.ucopy"
     bl_label = "Copy Selection"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
 
@@ -14,8 +19,13 @@ class UCLIPBOARD_OT_copy(bpy.types.Operator):
 
 
 class UCLIPBOARD_OT_cut(bpy.types.Operator):
-    bl_idname = "uclipboard.cut"
+    """
+    Cut selected elements in clipboard
+    """
+
+    bl_idname = "view3d.ucut"
     bl_label = "Cut Selection"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
 
@@ -25,8 +35,13 @@ class UCLIPBOARD_OT_cut(bpy.types.Operator):
 
 
 class UCLIPBOARD_OT_paste(bpy.types.Operator):
-    bl_idname = "uclipboard.paste"
+    """
+    Paste elements from clipboard
+    """
+
+    bl_idname = "view3d.upaste"
     bl_label = "Paste Selection"
+    bl_options = {"REGISTER", "UNDO"}
 
     def execute(self, context):
 
